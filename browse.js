@@ -1,3 +1,33 @@
+/**
+ * A super-simple but super-useful image browsing script.
+ * Run as `node browse.js` in whatever toplevel dir houses
+ * all your images, and then just fire up http:/localhost:8080
+ * 
+ * Navigation is pretty self explanatory, and clicking an image
+ * in an image gallery will make it fullscreen.
+ * 
+ * While on an image gallery, you have the following controls
+ * while no image is loaded yet:
+ * 
+ *   click an image = load that image
+ *   home/end = load first/last image
+ *   left/right = load prev/next image
+ *   pgup/pgdn = same
+ *   up/esc = go up a dir
+ * 
+ * when in full screen:
+ * 
+ *   up/esc/click top25% of the image = exit full screen
+ *   home/end = load first/last image
+ *   left/right = load prev/next image
+ *   pgup/pgdn = same
+ * 
+ * The URL will update based on what you're doing, and you 
+ * can always reload/copy-paste the link to get the same
+ * view you were looking at for that URL. That should be
+ * obvious, but not every web based tool bothers with that.
+ */
+
 import { createServer } from "node:http";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
