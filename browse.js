@@ -2,27 +2,27 @@
  * A super-simple but super-useful image browsing script.
  * Run as `node browse.js` in whatever toplevel dir houses
  * all your images, and then just fire up http:/localhost:8080
- * 
+ *
  * Navigation is pretty self explanatory, and clicking an image
  * in an image gallery will make it fullscreen.
- * 
+ *
  * While on an image gallery, you have the following controls
  * while no image is loaded yet:
- * 
+ *
  *   click an image = load that image
  *   home/end = load first/last image
  *   left/right = load prev/next image
  *   pgup/pgdn = same
  *   up/esc = go up a dir
- * 
+ *
  * when in full screen:
- * 
+ *
  *   up/esc/click top25% of the image = exit full screen
  *   home/end = load first/last image
  *   left/right = load prev/next image
  *   pgup/pgdn = same
- * 
- * The URL will update based on what you're doing, and you 
+ *
+ * The URL will update based on what you're doing, and you
  * can always reload/copy-paste the link to get the same
  * view you were looking at for that URL. That should be
  * obvious, but not every web based tool bothers with that.
@@ -48,6 +48,74 @@ const unwantedDataPaths = [`@eaDir`, `.DS_Store`, `Thumbs.db`];
 const formats = [`jpg`, `jpeg`, `png`, `webp`];
 const contentType = `Content-Type`;
 
+const baseHTML = (path) => `<head>
+  <meta charset="utf-8">
+  <title>${path.match(/[^\/]+\/?$/)?.[0]?.replaceAll(`/`, ``)}</title>
+  <style>* { font-size: 2vh; }</style>
+</head>
+`;
+
+const galleryCSS = `html {
+  h1 {
+    display: inline-block;
+    font-size: 2rem !important;
+    margin: 0;
+    padding-left: 2rem;
+    text-transform: capitalize;
+  }
+
+  &:has(.gallery img.full) {
+    cursor: pointer;
+    h1 { display: none; }
+    span { display: none; }
+  }
+
+  .gallery {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    user-select: none;
+
+    &:has(.full) {
+      img:not(.full) {
+        display: none;
+      }
+    }
+
+    img {
+      cursor: pointer;
+
+      .loading {
+        opacity: 0;
+      }
+
+      &.full {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        width: auto;
+        max-width: 100%;
+        height: 100%;
+        max-height: 100%;
+        margin: auto;
+        object-fit: contain;
+      }
+
+      &:not(.full) {
+        max-width: 200px;
+        max-height: 300px;
+        object-fit: contain;
+        background: #eee6;
+        border: 1px solid black;
+        margin: 0.25em;
+      }
+    }
+  }
+}
+`;
+
+// A helper function to determine whether a URL is an image URL or not.
 function isImage(string) {
   return formats.find((format) =>
     string.toLowerCase().endsWith(`.${format.toLowerCase()}`),
@@ -111,26 +179,19 @@ function routeHandler(req, res) {
  * A very simple HTML document builder
  */
 function createPage(path, isDir, root = false) {
-  const html = `<head>
-  <meta charset="utf-8">
-  <title>${path.match(/[^\/]+\/?$/)?.[0]?.replaceAll(`/`, ``)}</title>
-  <style>* { font-size: 2vh; }</style>
-</head>
-  `;
-
   if (isDir) {
     const content = readdirSync(path).filter((e) => filterForImage(path, e));
     const hasImages = content.some(isImage);
-
     if (!hasImages) {
-      return html + generateDirListing(path, content, root);
+      // standard dir listing
+      return baseHTML(path) + generateDirListing(path, content, root);
     }
-
+    // image gallery
     sortDirContent(path, content);
-    return html + generateGallery(path, content);
+    return baseHTML(path) + generateGallery(path, content);
   }
-
-  return html;
+  // ...what was this???
+  return baseHTML(path);
 }
 
 /**
@@ -174,7 +235,8 @@ function sortDirContent(path, content) {
 
 /**
  * Navigate to the current URL's parent path.
- * This code gets inlined as a function via toString.
+ *
+ * This code gets inlined into the page via .toString()
  */
 function goUp() {
   const newURL = location.toString().replace(/[^\/]+\/?$/, ``);
@@ -197,18 +259,21 @@ function goUpKeyHandler() {
 
 /**
  * Add image navigation to all <img> on the page.
- * This code gets inlined as a function via toString.
+ *
+ * This code gets inlined into the page via .toString()
  */
 function imageNavigation() {
   let fullscreen;
   const imgs = [...document.querySelectorAll(`img`)];
 
+  // un-fullscreen a gallery view
   function unload(bypassHistory = false) {
     fullscreen?.classList.remove(`full`);
     fullscreen = undefined;
     if (!bypassHistory) history.pushState({}, ``, `./`);
   }
 
+  // load an image full screen
   function load(idx, bypassHistory = false) {
     if (idx === false) return unload();
     fullscreen?.classList.remove(`full`);
@@ -217,19 +282,24 @@ function imageNavigation() {
     if (!bypassHistory) history.pushState({}, ``, `./${idx}`);
   }
 
+  // show the previous image
   function prev(pos = imgs.indexOf(fullscreen)) {
     if (pos > 0) load(pos - 1);
   }
 
+  // show the next image
   function next(pos = imgs.indexOf(fullscreen)) {
     if (pos < imgs.length - 1) load(pos + 1);
   }
 
+  // either exit fullscreen or go up a dir, depending on
+  // whether or not we're looking at a full screen image
   function cancel(evt) {
     evt?.preventDefault();
     fullscreen ? load(false) : goUp();
   }
 
+  // Key handling...
   document.addEventListener(`keydown`, (evt) => {
     const { key } = evt;
     if (key === `Escape` || key === `ArrowUp`) cancel(evt);
@@ -241,6 +311,7 @@ function imageNavigation() {
     if (key === `End`) load(imgs.length - 1);
   });
 
+  // Click handling...
   document.addEventListener(`click`, (evt) => {
     const img = evt.target;
 
@@ -265,6 +336,8 @@ function imageNavigation() {
     }
   });
 
+  // And popstate handling, so we do the right thing
+  // on navigations with and without image suffixes.
   window.addEventListener(`popstate`, (event) => {
     const bypass = true;
     const loc = location.toString().split(`/`);
@@ -276,14 +349,18 @@ function imageNavigation() {
     }
   });
 
+  // Then: do we need to immediately load an image?
   const loadPos = parseFloat(location.toString().match(/\d+$/)?.[0]);
-
   if (!isNaN(loadPos)) {
     const img = imgs[loadPos];
     img.src = encodeURIComponent(img.dataset.src);
     load(loadPos);
   }
 
+  // And irrespective of whether we did or not, start loading
+  // all images in this dir, one by one, in sequence. We don't
+  // want a million URLs all firing at the same time, loading
+  // things completely out of order.
   (function loadImages(loadList) {
     if (loadList.length === 0) return;
     const img = loadList.shift();
@@ -297,69 +374,8 @@ function imageNavigation() {
   })(Array.from(imgs));
 }
 
-const galleryCSS = `
-html {
-  h1 {
-    display: inline-block;
-    font-size: 2rem !important;
-    margin: 0;
-    padding-left: 2rem;
-    text-transform: capitalize;
-  }
-
-  &:has(.gallery img.full) {
-    cursor: pointer;
-    h1 { display: none; }
-    span { display: none; }
-  }
-
-  .gallery {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    user-select: none;
-
-    &:has(.full) {
-      img:not(.full) {
-        display: none;
-      }
-    }
-
-    img {
-      cursor: pointer;
-
-      .loading {
-        opacity: 0;
-      }
-
-      &.full {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        width: auto;
-        max-width: 100%;
-        height: 100%;
-        max-height: 100%;
-        margin: auto;
-        object-fit: contain;
-      }
-
-      &:not(.full) {
-        max-width: 200px;
-        max-height: 300px;
-        object-fit: contain;
-        background: #eee6;
-        border: 1px solid black;
-        margin: 0.25em;
-      }
-    }
-  }
-}
-`;
-
 /**
- * Generate the gallery HTML
+ * Generate the gallery HTML.
  */
 function generateGallery(path, content) {
   const title = path.split(`/`).at(-2);
@@ -383,7 +399,7 @@ function generateGallery(path, content) {
 }
 
 /**
- * Generate a dir listing
+ * Generate a dir listing.
  */
 function generateDirListing(path, content, root) {
   return `
